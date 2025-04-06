@@ -1,20 +1,20 @@
-require('dotenv').config({ path: '.env.local' })
-const express = require('express')
-const app = express()
-const port = 3000
+require("dotenv").config({ path: ".env.local" });
+const express = require("express");
+const app = express();
+const port = 3000;
 // TODO: Cors?
 
-app.get('/', (req, res) => {
-  res.send('Hello World!')
-})
+app.get("/", (req, res) => {
+    res.send("Hello World!");
+});
 
-app.get('/hello', (req, res) => {
-    res.send("I made this hello!")
-})
+app.get("/hello", (req, res) => {
+    res.send("I made this hello!");
+});
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
-})
+    console.log(`Example app listening on port ${port}`);
+});
 
 // postgres
 
@@ -24,109 +24,139 @@ const cn = {
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
-    max: 30 // use up to 30 connections
+    max: 30, // use up to 30 connections
 
     // "types" - in case you want to set custom type parsers on the pool level
 };
 
-const pgp = require('pg-promise')(/* options */)
-const db = pgp(cn)
+const pgp = require("pg-promise")(/* options */);
+const db = pgp(cn);
 
-function buildVehicleQueryWithParams(base, params, group = null) {
+function buildVehicleQueryWithParams({ base, params, group = null }) {
     // let query = `SELECT * FROM vehicles WHERE 1=1`
+    // console.log(base, params);
     let query = base;
     const values = [];
     const searchableParams = {
-        make: 'make',
-        model: 'model',
-        model_year: 'model_year',
-        state: 'state',
-        city: 'city',
-        ev_type: 'ev_type'
+        make: "make",
+        model: "model",
+        model_year: "model_year",
+        state: "state",
+        city: "city",
+        ev_type: "ev_type",
     };
 
-    for (const key in params){
-        if (searchableParams[key]){
+    for (const key in params) {
+        if (searchableParams[key]) {
             values.push(params[key]);
             query += ` AND ${searchableParams[key]} = $${values.length}`;
         }
     }
-    if (group){
+    if (group) {
         query += ` GROUP BY ${group}`;
     }
-    if (params.order_by){
-        query += ` ORDER BY ${params.order_by} ${params.direction ? params.direction: "DESC"}`
+    if (params.order_by) {
+        query += ` ORDER BY ${params.order_by} ${params.direction ? params.direction : "DESC"}`;
     }
-
-    return {query, values}
+    // console.log(query, values);
+    return { query, values };
 }
 
 // GET vehicles
-app.get('/api/vehicles', async(req, res) => {
+app.get("/api/vehicles", async (req, res) => {
     // pagination?
-    let base = `SELECT * FROM vehicles WHERE 1=1`
-    const {query, values} = buildVehicleQueryWithParams(base, req.query, null, "model_year");
+    let base = `SELECT * FROM vehicles WHERE 1=1`;
+    const { query, values } = buildVehicleQueryWithParams({
+        base: base,
+        params: req.query,
+    });
 
     try {
         const result = await db.any(query, values);
         res.json(result);
     } catch (error) {
-        console.error('Database error:', error);
-        res.status(500).json({ 
-            error: 'Internal Server Error',
-            details: error.message
-          });
+        // TODO: error catching function
+        console.error("Database error:", error);
+        // error comes from pgpromise
+        if (error.name === "QueryResultError") {
+            return res.status(404).json(error.message);
+        }
+        // error comes from psql engine
+        if (error.code === "42703") {
+            res.status(400).json(error.message);
+        }
+
+        return res.status(500).json(error.message);
     }
-})
+});
 
 // GET individual vehicle
-app.get('/api/vehicles/:id', async(req, res) => {
+app.get("/api/vehicles/:id", async (req, res) => {
     const vehicleId = req.params.id;
 
     try {
-        const result = await db.one('SELECT * FROM vehicles WHERE dol_vehicle_id = $1', [vehicleId]);
+        const result = await db.one(
+            "SELECT * FROM vehicles WHERE dol_vehicle_id = $1",
+            [vehicleId],
+        );
         res.json(result);
     } catch (error) {
-        console.error('Database error:', error);
-        res.status(404).json({ 
-            error: 'Not Found',
-            details: error.message
-          });
+        console.error("Database error:", error);
+        res.status(404).json({
+            error: "Not Found",
+            details: error.message,
+        });
     }
-})
+});
 
 // GET makes
-app.get('/api/makes', async(req, res) => {
+app.get("/api/makes", async (req, res) => {
     let base = `SELECT make, COUNT(*) as count FROM vehicles WHERE 1=1`;
-    const {query, values} = buildVehicleQueryWithParams(base, req.query, "make");
+    const { query, values } = buildVehicleQueryWithParams({
+        base: base,
+        params: req.query,
+        group: "make",
+    });
 
     try {
         const result = await db.any(query, values);
         res.json(result);
     } catch (error) {
-        console.error('Database error:', error);
-        res.status(500).json({ 
-            error: 'Internal Server Error',
-            details: error.message
-          });
+        console.error("Database error:", error);
+        res.status(500).json({
+            error: "Internal Server Error",
+            details: error.message,
+        });
     }
-})
+});
 
-// // TODO
-// app.get('/api/models', async(req, res) => {
-//     try {
-        
-//     } catch (error) {
-        
-//     }
-// })
+// TODO
+app.get("/api/models", async (req, res) => {
+    let base = `SELECT model, COUNT(*) as count FROM vehicles WHERE 1=1`;
+    const { query, values } = buildVehicleQueryWithParams({
+        base: base,
+        params: req.query,
+        group: "model",
+    });
+
+    try {
+        const result = await db.any(query, values);
+        res.json(result);
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({
+            error: "Internal Server Error",
+            details: error.message,
+        });
+    }
+});
 
 // // TODO: GET stats, might be difficult? needs to compile stats (maybe per state?)
 // app.get('/api/stats', async(req, res) => {
 //     try {
-        
+
 //     } catch (error) {
-        
+
 //     }
 // })
 
@@ -145,8 +175,8 @@ app.get('/api/makes', async(req, res) => {
 //     console.log('USER:', user);
 // })
 // .catch(error => {
-//     // error;  
-//     console.log('ERROR:', error)  
+//     // error;
+//     console.log('ERROR:', error)
 // });
 
 // db.any({
@@ -159,8 +189,8 @@ app.get('/api/makes', async(req, res) => {
 //         res.send(query)
 //     })
 //     .catch(error => {
-//         // error;  
-//         console.log('ERROR:', error)  
+//         // error;
+//         console.log('ERROR:', error)
 //     });
 
 // db.any({
@@ -173,8 +203,8 @@ app.get('/api/makes', async(req, res) => {
 //         console.log('USER:', user);
 //     })
 //     .catch(error => {
-//         // error;  
-//         console.log('ERROR:', error)  
+//         // error;
+//         console.log('ERROR:', error)
 //     });
 
 // db.any({
@@ -186,8 +216,8 @@ app.get('/api/makes', async(req, res) => {
 //         console.log('USER:', user);
 //     })
 //     .catch(error => {
-//         // error;  
-//         console.log('ERROR:', error)  
+//         // error;
+//         console.log('ERROR:', error)
 //     });
 
 // db.any({
@@ -200,8 +230,8 @@ app.get('/api/makes', async(req, res) => {
 //         console.log('USER:', user);
 //     })
 //     .catch(error => {
-//         // error;  
-//         console.log('ERROR:', error)  
+//         // error;
+//         console.log('ERROR:', error)
 //     });
 
 // db.any({
@@ -213,8 +243,8 @@ app.get('/api/makes', async(req, res) => {
 //         console.log('USER:', user);
 //     })
 //     .catch(error => {
-//         // error;  
-//         console.log('ERROR:', error)  
+//         // error;
+//         console.log('ERROR:', error)
 //     });
 
 // db.any({
@@ -226,8 +256,8 @@ app.get('/api/makes', async(req, res) => {
 //         console.log('USER:', user);
 //     })
 //     .catch(error => {
-//         // error;  
-//         console.log('ERROR:', error)  
+//         // error;
+//         console.log('ERROR:', error)
 //     });
 
 // db.one('SELECT $1 AS value', 123)
