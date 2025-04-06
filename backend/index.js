@@ -32,44 +32,44 @@ const cn = {
 const pgp = require('pg-promise')(/* options */)
 const db = pgp(cn)
 
-function buildVehicleQuery(params) {
-    let query = `SELECT * FROM vehicles WHERE 1=1`;
+function buildVehicleQueryWithParams(base, params, group = null) {
+    // let query = `SELECT * FROM vehicles WHERE 1=1`
+    let query = base;
     const values = [];
     const searchableParams = {
         make: 'make',
         model: 'model',
         model_year: 'model_year',
         state: 'state',
+        city: 'city',
         ev_type: 'ev_type'
     };
 
-    for (const key in searchableParams){
+    for (const key in params){
         if (searchableParams[key]){
-            values.push(searchableParams[key]);
+            values.push(params[key]);
             query += ` AND ${searchableParams[key]} = $${values.length}`;
         }
     }
+    if (group){
+        query += ` GROUP BY ${group}`;
+    }
+    if (params.order_by){
+        query += ` ORDER BY ${params.order_by} ${params.direction ? params.direction: "DESC"}`
+    }
+
     return {query, values}
 }
 
-// TODO
+// GET vehicles
 app.get('/api/vehicles', async(req, res) => {
-    const { make, year, model, state, ev_type } = req.query;
-    let query = `SELECT * FROM vehicles WHERE 1=1`;
-    const params = [];
-
-    if (make){
-        params.push(make);
-        query += `AND make = $${params.length()}`
-    }
-
+    // pagination?
+    let base = `SELECT * FROM vehicles WHERE 1=1`
+    const {query, values} = buildVehicleQueryWithParams(base, req.query, null, "model_year");
 
     try {
-        const query = await db.any({
-            name: 'Unique makes',
-            text: 'SELECT make, COUNT(*) as count FROM vehicles GROUP BY make ORDER BY count DESC'
-        });
-        res.json(query);
+        const result = await db.any(query, values);
+        res.json(result);
     } catch (error) {
         console.error('Database error:', error);
         res.status(500).json({ 
@@ -79,25 +79,36 @@ app.get('/api/vehicles', async(req, res) => {
     }
 })
 
-// // TODO
-// app.get('/api/vehicles/:id', async(req, res) => {
-//     try {
-        
-//     } catch (error) {
-        
-//     }
-// })
+// GET individual vehicle
+app.get('/api/vehicles/:id', async(req, res) => {
+    const vehicleId = req.params.id;
+
+    try {
+        const result = await db.one('SELECT * FROM vehicles WHERE dol_vehicle_id = $1', [vehicleId]);
+        res.json(result);
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(404).json({ 
+            error: 'Not Found',
+            details: error.message
+          });
+    }
+})
 
 // GET makes
 app.get('/api/makes', async(req, res) => {
+    let base = `SELECT make, COUNT(*) as count FROM vehicles WHERE 1=1`;
+    const {query, values} = buildVehicleQueryWithParams(base, req.query, "make");
+
     try {
-        const query = await db.any({
-            name: 'Unique makes',
-            text: 'SELECT make, COUNT(*) as count FROM vehicles GROUP BY make ORDER BY count DESC'
-        });
-        res.json(query);
+        const result = await db.any(query, values);
+        res.json(result);
     } catch (error) {
-        console.log('ERROR:', error);
+        console.error('Database error:', error);
+        res.status(500).json({ 
+            error: 'Internal Server Error',
+            details: error.message
+          });
     }
 })
 
@@ -193,18 +204,18 @@ app.get('/api/makes', async(req, res) => {
 //         console.log('ERROR:', error)  
 //     });
 
-db.any({
-    name: 'Count Rows',
-    text: 'SELECT COUNT(*) FROM vehicles',
-})
-    .then(user => {
-        // user found;
-        console.log('USER:', user);
-    })
-    .catch(error => {
-        // error;  
-        console.log('ERROR:', error)  
-    });
+// db.any({
+//     name: 'Count Rows',
+//     text: 'SELECT COUNT(*) FROM vehicles',
+// })
+//     .then(user => {
+//         // user found;
+//         console.log('USER:', user);
+//     })
+//     .catch(error => {
+//         // error;  
+//         console.log('ERROR:', error)  
+//     });
 
 // db.any({
 //     name: 'Count Rows with non-zero non-null MSRP',
