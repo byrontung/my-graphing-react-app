@@ -1,8 +1,10 @@
 require("dotenv").config({ path: ".env.local" });
 const express = require("express");
+const cors = require('cors')
 const app = express();
 const port = 3000;
-// TODO: Cors?
+
+app.use(cors())
 
 app.get("/", (req, res) => {
     res.send("Hello World!");
@@ -58,6 +60,10 @@ function buildVehicleQueryWithParams({ base, params, group = null }) {
     if (params.order_by) {
         query += ` ORDER BY ${params.order_by} ${params.direction ? params.direction : "DESC"}`;
     }
+    if (params.limit) {
+        query += ` LIMIT ${params.limit}`;
+
+    }
     // console.log(query, values);
     return { query, values };
 }
@@ -83,7 +89,7 @@ app.get("/api/vehicles", async (req, res) => {
         }
         // error comes from psql engine
         if (error.code === "42703") {
-            res.status(400).json(error.message);
+            return res.status(400).json(error.message);
         }
 
         return res.status(500).json(error.message);
@@ -95,17 +101,25 @@ app.get("/api/vehicles/:id", async (req, res) => {
     const vehicleId = req.params.id;
 
     try {
-        const result = await db.one(
+        const result = await db.oneOrNone(
             "SELECT * FROM vehicles WHERE dol_vehicle_id = $1",
             [vehicleId],
         );
         res.json(result);
     } catch (error) {
         console.error("Database error:", error);
-        res.status(404).json({
-            error: "Not Found",
-            details: error.message,
-        });
+        // TODO: QueryResultError comes from the expectation of db.*
+        //       Other queries use any, therefore we don't need QueryResultError?
+        // error comes from pgpromise
+        if (error.name === "QueryResultError") {
+            return res.status(404).json(error.message);
+        }
+        // error comes from psql engine
+        if (error.code === "42703") {
+            return res.status(400).json(error.message);
+        }
+
+        return res.status(500).json(error.message);
     }
 });
 
@@ -123,14 +137,20 @@ app.get("/api/makes", async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error("Database error:", error);
-        res.status(500).json({
-            error: "Internal Server Error",
-            details: error.message,
-        });
+        // error comes from pgpromise
+        if (error.name === "QueryResultError") {
+            return res.status(404).json(error.message);
+        }
+        // error comes from psql engine
+        if (error.code === "42703") {
+            return res.status(400).json(error.message);
+        }
+
+        return res.status(500).json(error.message);
     }
 });
 
-// TODO
+// GET models
 app.get("/api/models", async (req, res) => {
     let base = `SELECT model, COUNT(*) as count FROM vehicles WHERE 1=1`;
     const { query, values } = buildVehicleQueryWithParams({
@@ -144,10 +164,16 @@ app.get("/api/models", async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error("Database error:", error);
-        res.status(500).json({
-            error: "Internal Server Error",
-            details: error.message,
-        });
+        // error comes from pgpromise
+        if (error.name === "QueryResultError") {
+            return res.status(404).json(error.message);
+        }
+        // error comes from psql engine
+        if (error.code === "42703") {
+            return res.status(400).json(error.message);
+        }
+
+        return res.status(500).json(error.message);
     }
 });
 
