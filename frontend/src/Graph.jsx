@@ -1,5 +1,5 @@
 import { Chart as ChartJS } from "chart.js/auto";
-import { Line, Bar, Doughnut } from "react-chartjs-2";
+import { Line, Bar, Doughnut, Pie } from "react-chartjs-2";
 import revenueData from "./assets/revenueData.json";
 import "./Graph.css";
 import { useState, useEffect } from "react";
@@ -10,7 +10,7 @@ function Graph() {
 
     useEffect(() => {
         axios
-            .get("http://localhost:3000/api/makes")
+            .get("http://localhost:3000/api/makes?order_by=count&limit=10")
             .then((res) => setCarData(res.data))
             .catch((err) => console.error(err));
     }, []);
@@ -43,6 +43,17 @@ function Graph() {
                             data: carData.map((data) => Math.log(data.count)),
                             backgroundColor: "#85BB65",
                             borderColor: "#85BB65",
+                        },
+                    ],
+                }}
+            />
+            <Pie
+                data={{
+                    labels: carData.map((data) => data.make),
+                    datasets: [
+                        {
+                            label: "count",
+                            data: carData.map((data) => data.count)
                         },
                     ],
                 }}
