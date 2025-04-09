@@ -1,10 +1,10 @@
 require("dotenv").config({ path: ".env.local" });
 const express = require("express");
-const cors = require('cors')
+const cors = require("cors");
 const app = express();
 const port = 3000;
 
-app.use(cors())
+app.use(cors());
 
 app.get("/", (req, res) => {
     res.send("Hello World!");
@@ -39,30 +39,73 @@ function buildVehicleQueryWithParams({ base, params, group = null }) {
     // console.log(base, params);
     let query = base;
     const values = [];
-    const searchableParams = {
+    // const searchableParams = {
+    //     make: "make",
+    //     model: "model",
+    //     model_year: "model_year",
+    //     state: "state",
+    //     city: "city",
+    //     ev_type: "ev_type",
+    // };
+    const validQueryParams = {
+        vin_prefix: "vin_prefix",
+        county: "county",
+        city: "city",
+        state: "state",
+        postal_code: "postal_code",
+        model_year: "model_year",
         make: "make",
         model: "model",
-        model_year: "model_year",
-        state: "state",
-        city: "city",
         ev_type: "ev_type",
+        cafv_eligibility: "cafv_eligibility",
+        electric_range: "electric_range",
+        legislative_district: "legislative_district",
+        dol_vehicle_id: "dol_vehicle_id",
+        electric_utility: "electric_utility",
+        census_tract: "census_tract",
     };
+    const validOrderByParams = [
+        "vin_prefix",
+        "county",
+        "city",
+        "state",
+        "postal_code",
+        "model_year",
+        "make",
+        "model",
+        "ev_type",
+        "cafv_eligibility",
+        "electric_range",
+        "base_msrp",
+        "legislative_district",
+        "electric_utility",
+        "census_tract",
+        "count"
+    ];
+    const validDirection = ["DESC", "ASC"];
 
     for (const key in params) {
-        if (searchableParams[key]) {
+        if (validQueryParams[key]) {
             values.push(params[key]);
-            query += ` AND ${searchableParams[key]} = $${values.length}`;
+            query += ` AND ${validQueryParams[key]} = $${values.length}`;
         }
     }
+    // group comes from the base API, not the query. No need to check for sqli
     if (group) {
         query += ` GROUP BY ${group}`;
     }
-    if (params.order_by) {
-        query += ` ORDER BY ${params.order_by} ${params.direction ? params.direction : "DESC"}`;
+    if (params.order_by && validOrderByParams.includes(params.order_by)) {
+        let direction = "DESC";
+        if (params.direction && validDirection.includes(params.direction)) {
+            direction = params.direction;
+        }
+        query += ` ORDER BY ${params.order_by} ${direction}`;
     }
     if (params.limit) {
-        query += ` LIMIT ${params.limit}`;
-
+        const parsedLimit = parseInt(params.limit);
+        if (!isNaN(parsedLimit)) {
+            query += ` LIMIT ${parsedLimit}`;
+        }
     }
     // console.log(query, values);
     return { query, values };
